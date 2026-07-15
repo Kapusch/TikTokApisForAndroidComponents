@@ -1,0 +1,10 @@
+.DS_Store
+.gradle/
+artifacts/
+bin/
+obj/
+src/**/Native/Android/**/build/
+src/**/Native/Android/local.properties
+src/**/Native/Android/upstream/
+src/**/Native/Android/tiktok-open-sdk-core
+src/**/Native/Android/tiktok-open-sdk-share

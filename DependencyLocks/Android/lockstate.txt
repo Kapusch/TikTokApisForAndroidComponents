@@ -1,0 +1,3 @@
+# TikTok OpenSDK Android v2.3.1 source archive
+https://github.com/tiktok/tiktok-opensdk-android/archive/refs/tags/v2.3.1.tar.gz be8e2d4b31fe0eaed2b9c7317b0818b512c13a3ac5fcd7934c4458f01848dc5f tiktok-opensdk-android-v2.3.1.tar.gz
+

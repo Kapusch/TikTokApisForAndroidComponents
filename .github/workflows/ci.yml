@@ -1,0 +1,34 @@
+name: ci
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build_pack_android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+      - uses: actions/setup-java@v4
+        with:
+          distribution: microsoft
+          java-version: "21"
+      - uses: android-actions/setup-android@v3
+      - name: Install Android workload
+        run: dotnet workload install android
+      - name: Build pinned Core + Share wrapper
+        run: bash src/Kapusch.TikTokApisForAndroidComponents/Native/Android/build.sh
+      - name: Pack
+        run: dotnet pack src/Kapusch.TikTokApisForAndroidComponents/Kapusch.TikTokApisForAndroidComponents.csproj -c Release -o artifacts/nuget
+      - name: Validate package
+        run: scripts/validate-package.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nuget
+          path: artifacts/nuget/*.nupkg

@@ -1,0 +1,111 @@
+name: publish
+
+on:
+  workflow_dispatch:
+    inputs:
+      manual_version:
+        description: "Publish this version to NuGet.org; leave empty for a GitHub Packages preview"
+        required: false
+        type: string
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  pack_and_publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Determine package version
+        id: version
+        shell: bash
+        run: |
+          REF="${{ github.ref }}"
+          MANUAL_VERSION="${{ github.event.inputs.manual_version }}"
+          CSPROJ="src/Kapusch.TikTokApisForAndroidComponents/Kapusch.TikTokApisForAndroidComponents.csproj"
+          BASE_VERSION=$(grep -oE '<Version>[^<]+' "$CSPROJ" | head -n 1 | sed 's/<Version>//')
+
+          if [[ -n "$MANUAL_VERSION" ]]; then
+            VERSION="$MANUAL_VERSION"
+            PUBLISH_TARGET="nuget"
+          elif [[ "$REF" =~ ^refs/tags/v ]]; then
+            VERSION="${REF#refs/tags/v}"
+            PUBLISH_TARGET="nuget"
+          else
+            VERSION="${BASE_VERSION}-preview.${{ github.run_number }}.$(git rev-parse --short HEAD)"
+            PUBLISH_TARGET="github"
+          fi
+
+          if [[ "$PUBLISH_TARGET" == "nuget" ]]; then
+            git fetch origin master
+            if ! git merge-base --is-ancestor "${{ github.sha }}" origin/master; then
+              echo "ERROR: NuGet.org releases must be reachable from origin/master."
+              exit 1
+            fi
+          fi
+
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "publish_target=$PUBLISH_TARGET" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: microsoft
+          java-version: "21"
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Install Android workload
+        run: dotnet workload install android
+
+      - name: Build pinned Core + Share wrapper
+        run: bash src/Kapusch.TikTokApisForAndroidComponents/Native/Android/build.sh
+
+      - name: Pack
+        run: |
+          dotnet pack src/Kapusch.TikTokApisForAndroidComponents/Kapusch.TikTokApisForAndroidComponents.csproj \
+            -c Release \
+            -o artifacts/nuget \
+            /p:PackageVersion="${{ steps.version.outputs.version }}"
+
+      - name: Validate package
+        run: scripts/validate-package.sh "artifacts/nuget/Kapusch.TikTok.Android.${{ steps.version.outputs.version }}.nupkg"
+
+      - name: Push to NuGet.org
+        if: steps.version.outputs.publish_target == 'nuget'
+        uses: NuGet/login@v1
+        id: nuget_login
+        with:
+          user: ${{ secrets.NUGET_USER }}
+
+      - name: Push to NuGet.org
+        if: steps.version.outputs.publish_target == 'nuget'
+        run: |
+          dotnet nuget push artifacts/nuget/*.nupkg \
+            --api-key "${{ steps.nuget_login.outputs.NUGET_API_KEY }}" \
+            --source "https://api.nuget.org/v3/index.json" \
+            --skip-duplicate
+
+      - name: Push to GitHub Packages
+        if: steps.version.outputs.publish_target == 'github'
+        env:
+          NUGET_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          dotnet nuget push artifacts/nuget/*.nupkg \
+            --api-key "$NUGET_AUTH_TOKEN" \
+            --source "https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json" \
+            --skip-duplicate

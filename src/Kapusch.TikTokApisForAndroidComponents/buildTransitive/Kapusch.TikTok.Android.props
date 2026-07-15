@@ -1,0 +1,7 @@
+<Project>
+  <PropertyGroup>
+    <DisableKapuschTikTokAndroidNativeAssets Condition="'$(DisableKapuschTikTokAndroidNativeAssets)' == ''">false</DisableKapuschTikTokAndroidNativeAssets>
+    <UseKapuschTikTokAndroidInteropFromSource Condition="'$(UseKapuschTikTokAndroidInteropFromSource)' == ''">false</UseKapuschTikTokAndroidInteropFromSource>
+    <KapuschTikTokAndroidIncludeBundledRuntimeDependencies Condition="'$(KapuschTikTokAndroidIncludeBundledRuntimeDependencies)' == ''">true</KapuschTikTokAndroidIncludeBundledRuntimeDependencies>
+  </PropertyGroup>
+</Project>

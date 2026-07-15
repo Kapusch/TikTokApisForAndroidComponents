@@ -1,0 +1,49 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0-android</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <DefaultItemExcludes>$(DefaultItemExcludes);Native/**</DefaultItemExcludes>
+    <PackageId>Kapusch.TikTok.Android</PackageId>
+    <Authors>Kapusch</Authors>
+    <Description>TikTok Android OpenSDK Core + Share interop and native artifacts.</Description>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <RepositoryUrl>https://github.com/Kapusch/TikTokApisForAndroidComponents</RepositoryUrl>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <IsPackable>true</IsPackable>
+    <IncludeSymbols>false</IncludeSymbols>
+    <NoWarn>$(NoWarn);NU5128</NoWarn>
+    <AssemblyName>Kapusch.TikTok.Android</AssemblyName>
+    <RootNamespace>Kapusch.TikTok.Android</RootNamespace>
+    <Version>1.0.0</Version>
+    <PackageReadmeFile>nuget-readme.md</PackageReadmeFile>
+    <TikTokAndroidAarsDir Condition="'$(TikTokAndroidAarsDir)' == '' and Exists('Native/Android/build/aar')">Native/Android/build/aar</TikTokAndroidAarsDir>
+    <TikTokAndroidDepsDir Condition="'$(TikTokAndroidDepsDir)' == '' and Exists('Native/Android/build/deps')">Native/Android/build/deps</TikTokAndroidDepsDir>
+  </PropertyGroup>
+  <ItemGroup>
+    <AndroidAarLibrary Remove="Native/**" />
+    <AndroidExternalJavaLibrary Remove="Native/**" />
+    <AndroidJavaSource Remove="Native/**" />
+    <AndroidLibrary Remove="Native/**" />
+    <Content Remove="Native/**" />
+    <EmbeddedResource Remove="Native/**" />
+    <LibraryProjectZip Remove="Native/**" />
+    <None Remove="Native/**" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="buildTransitive/**" Pack="true" PackagePath="buildTransitive/" />
+    <None Include="nuget-readme.md" Pack="true" PackagePath="/" />
+    <None Include="../../THIRD_PARTY_NOTICES.md" Pack="true" PackagePath="/" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(TikTokAndroidAarsDir)' != '' and Exists('$(TikTokAndroidAarsDir)')">
+    <None Include="$(TikTokAndroidAarsDir)/*.aar" Pack="true" PackagePath="android/aar/" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(TikTokAndroidDepsDir)' != '' and Exists('$(TikTokAndroidDepsDir)')">
+    <None Include="$(TikTokAndroidDepsDir)/*" Pack="true" PackagePath="android/deps/" />
+  </ItemGroup>
+  <Target Name="_KapuschTikTokAndroid_CheckNativeAssets" BeforeTargets="GenerateNuspec" Condition="'$(IsPackable)' == 'true'">
+    <Error Condition="'$(TikTokAndroidAarsDir)' == '' or !Exists('$(TikTokAndroidAarsDir)')" Text="Missing TikTok Android AARs. Run Native/Android/build.sh first." />
+    <Error Condition="'$(TikTokAndroidDepsDir)' == '' or !Exists('$(TikTokAndroidDepsDir)')" Text="Missing TikTok Android runtime dependencies. Run Native/Android/build.sh first." />
+  </Target>
+</Project>
+

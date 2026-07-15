@@ -1,0 +1,23 @@
+<Project>
+  <PropertyGroup>
+    <_KapuschTikTokAndroidPackageRoot>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..'))</_KapuschTikTokAndroidPackageRoot>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(UseKapuschTikTokAndroidInteropFromSource)' == 'true'">
+    <_KapuschTikTokAndroidSourceRoot>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)../Native/Android/build'))</_KapuschTikTokAndroidSourceRoot>
+  </PropertyGroup>
+  <Target Name="KapuschTikTokInterop_InjectAndroidLibraries_Source" BeforeTargets="_ResolveLibraryProjectImports" Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android' and '$(DisableKapuschTikTokAndroidNativeAssets)' != 'true' and '$(UseKapuschTikTokAndroidInteropFromSource)' == 'true'">
+    <Error Condition="!Exists('$(_KapuschTikTokAndroidSourceRoot)/aar/ktk-tiktokinterop-release.aar')" Text="Kapusch.TikTok.Android source-mode native assets are missing. Run Native/Android/build.sh." />
+    <ItemGroup>
+      <AndroidAarLibrary Include="$(_KapuschTikTokAndroidSourceRoot)/aar/*.aar" />
+      <AndroidAarLibrary Include="$(_KapuschTikTokAndroidSourceRoot)/deps/*.aar" Condition="'$(KapuschTikTokAndroidIncludeBundledRuntimeDependencies)' == 'true'" />
+      <AndroidExternalJavaLibrary Include="$(_KapuschTikTokAndroidSourceRoot)/deps/*.jar" Condition="'$(KapuschTikTokAndroidIncludeBundledRuntimeDependencies)' == 'true'" />
+    </ItemGroup>
+  </Target>
+  <Target Name="KapuschTikTokInterop_InjectAndroidLibraries" BeforeTargets="_ResolveLibraryProjectImports" Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android' and '$(DisableKapuschTikTokAndroidNativeAssets)' != 'true' and '$(UseKapuschTikTokAndroidInteropFromSource)' != 'true'">
+    <ItemGroup>
+      <AndroidAarLibrary Include="$(_KapuschTikTokAndroidPackageRoot)/android/aar/*.aar" />
+      <AndroidAarLibrary Include="$(_KapuschTikTokAndroidPackageRoot)/android/deps/*.aar" Condition="'$(KapuschTikTokAndroidIncludeBundledRuntimeDependencies)' == 'true'" />
+      <AndroidExternalJavaLibrary Include="$(_KapuschTikTokAndroidPackageRoot)/android/deps/*.jar" Condition="'$(KapuschTikTokAndroidIncludeBundledRuntimeDependencies)' == 'true'" />
+    </ItemGroup>
+  </Target>
+</Project>
