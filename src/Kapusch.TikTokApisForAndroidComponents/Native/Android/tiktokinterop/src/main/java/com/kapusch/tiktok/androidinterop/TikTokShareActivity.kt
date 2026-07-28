@@ -2,8 +2,10 @@ package com.kapusch.tiktok.androidinterop
 
 import android.app.Activity
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Bundle
+import android.util.Log
 import androidx.core.content.FileProvider
 import com.tiktok.open.sdk.core.appcheck.TikTokAppCheckUtil
 import com.tiktok.open.sdk.share.MediaType
@@ -18,15 +20,19 @@ class TikTokShareActivity : Activity() {
         const val EXTRA_STATUS = "ktk_status"
         const val EXTRA_ERROR_CODE = "ktk_error_code"
         private const val CLIENT_KEY_META_DATA = "com.kapusch.tiktok.CLIENT_KEY"
+        private const val LOG_TAG = "KapuschTikTokShare"
         private const val STATUS_SUCCESS = "success"
         private const val STATUS_DRAFT = "draft"
         private const val STATUS_CANCELLED = "cancelled"
         private const val STATUS_FAILED = "failed"
+        private const val ERROR_USER_CANCELLED = -2
         private const val ERROR_DRAFT_SAVED = 20016
+        private const val ERROR_SHARE_CANCELLED = 20013
     }
 
     private lateinit var shareApi: ShareApi
     private var waitingForCallback = false
+    private var leftForTikTok = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -35,6 +41,7 @@ class TikTokShareActivity : Activity() {
         if (handleTikTokCallback(intent)) return
         if (savedInstanceState != null) {
             waitingForCallback = savedInstanceState.getBoolean("waiting_for_callback", false)
+            leftForTikTok = savedInstanceState.getBoolean("left_for_tiktok", false)
             return
         }
 
@@ -47,8 +54,23 @@ class TikTokShareActivity : Activity() {
         handleTikTokCallback(intent)
     }
 
+    override fun onPause() {
+        if (waitingForCallback) {
+            leftForTikTok = true
+        }
+        super.onPause()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (waitingForCallback && leftForTikTok && !handleTikTokCallback(intent)) {
+            finishWith(STATUS_FAILED, "returned_without_callback")
+        }
+    }
+
     override fun onSaveInstanceState(outState: Bundle) {
         outState.putBoolean("waiting_for_callback", waitingForCallback)
+        outState.putBoolean("left_for_tiktok", leftForTikTok)
         super.onSaveInstanceState(outState)
     }
 
@@ -64,7 +86,7 @@ class TikTokShareActivity : Activity() {
             return
         }
 
-        val clientKey = applicationInfo.metaData?.getString(CLIENT_KEY_META_DATA).orEmpty()
+        val clientKey = readClientKey()
         if (clientKey.isBlank() || clientKey.startsWith("${'$'}{")) {
             finishWith(STATUS_FAILED, "missing_client_key")
             return
@@ -94,26 +116,62 @@ class TikTokShareActivity : Activity() {
             packageName = packageName,
             resultActivityFullPath = javaClass.name,
         )
+        Log.i(
+            LOG_TAG,
+            "Launching OpenSDK share target=$targetPackage mediaCount=${uris.size}",
+        )
         val launchResult = shareApi.share(request)
         if (launchResult.result != 0) {
-            finishWith(STATUS_FAILED, "launch_${launchResult.result}")
+            Log.e(LOG_TAG, "OpenSDK rejected share launch result=${launchResult.result}")
+            finishWith(STATUS_FAILED, "share_request_not_sent")
             return
         }
 
         waitingForCallback = true
     }
 
+    private fun readClientKey(): String =
+        try {
+            @Suppress("DEPRECATION")
+            val appInfo = packageManager.getApplicationInfo(packageName, PackageManager.GET_META_DATA)
+            appInfo.metaData?.getString(CLIENT_KEY_META_DATA).orEmpty()
+        } catch (_: PackageManager.NameNotFoundException) {
+            ""
+        }
+
     private fun handleTikTokCallback(callbackIntent: Intent?): Boolean {
         val response = shareApi.getShareResponseFromIntent(callbackIntent) ?: return false
+        Log.i(
+            LOG_TAG,
+            "Share response"
+                + " errorCode=${response.errorCode}"
+                + " subErrorCode=${response.subErrorCode}"
+                + " state=${response.state.orEmpty()}"
+                + " errorMessage=${response.errorMsg.orEmpty()}",
+        )
         when {
             response.errorCode == 0 -> finishWith(STATUS_SUCCESS, null)
-            response.errorCode == ERROR_DRAFT_SAVED -> finishWith(STATUS_DRAFT, null)
+            response.subErrorCode == ERROR_DRAFT_SAVED -> finishWith(STATUS_DRAFT, null)
+            response.errorCode == ERROR_USER_CANCELLED ||
+                response.subErrorCode == ERROR_SHARE_CANCELLED ->
+                finishWith(STATUS_CANCELLED, null)
             response.errorMsg?.contains("cancel", ignoreCase = true) == true ->
                 finishWith(STATUS_CANCELLED, null)
-            else -> finishWith(STATUS_FAILED, "tiktok_${response.errorCode}")
+            else ->
+                finishWith(
+                    STATUS_FAILED,
+                    buildErrorCode(response.errorCode, response.subErrorCode),
+                )
         }
         return true
     }
+
+    private fun buildErrorCode(errorCode: Int, subErrorCode: Int?): String =
+        if (subErrorCode == null || subErrorCode == 0) {
+            "tiktok_$errorCode"
+        } else {
+            "tiktok_${errorCode}_sub_$subErrorCode"
+        }
 
     private fun finishWith(status: String, errorCode: String?) {
         val result = Intent().putExtra(EXTRA_STATUS, status)

@@ -5,7 +5,9 @@
 Native source and dependencies are restored and built in this repository. The
 NuGet consumer never downloads native artifacts. The wrapper converts local
 image paths to read-only `FileProvider` URIs, grants TikTok access, and maps the
-TikTok callback to stable status values.
+TikTok callback to stable status values. It delegates the launch to the
+official `ShareApi` and recovers if the user returns to the caller without a
+TikTok callback.
 
 ```sh
 bash src/Kapusch.TikTokApisForAndroidComponents/Native/Android/build.sh
