@@ -1,0 +1,6 @@
+{
+  "appId": "com.kapusch.tiktokbusinessandroid.sample",
+  "tikTokAppId": "YOUR_TIKTOK_APP_ID",
+  "accessToken": "YOUR_EVENTS_MANAGER_APP_SECRET",
+  "debugMode": true
+}
