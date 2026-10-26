@@ -109,6 +109,8 @@ for rule in \
   grep -Fq -- "$rule" <<<"$rules" || fail "interop consumer rules lack: $rule"
 done
 
+unzip -p "$package" THIRD_PARTY_NOTICES.md | grep -Fq "TikTok Business SDK for Android $sdk_version" || fail "THIRD_PARTY_NOTICES.md does not describe the Business SDK $sdk_version"
+
 nuspec="$(cat "$tmp_dir"/*.nuspec)"
 for dependency in Xamarin.AndroidX.Annotation Xamarin.AndroidX.Lifecycle.Process Xamarin.Kotlin.StdLib; do
   grep -Fq "id=\"$dependency\"" <<<"$nuspec" || fail "missing managed dependency $dependency"

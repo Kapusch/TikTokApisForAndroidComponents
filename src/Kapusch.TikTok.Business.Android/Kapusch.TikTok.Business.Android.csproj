@@ -52,7 +52,7 @@
   <ItemGroup>
     <None Include="buildTransitive/**" Pack="true" PackagePath="buildTransitive/" />
     <None Include="nuget-readme.md" Pack="true" PackagePath="/" />
-    <None Include="../../THIRD_PARTY_NOTICES.md" Pack="true" PackagePath="/" />
+    <None Include="../../THIRD_PARTY_NOTICES.Business.md" Pack="true" PackagePath="THIRD_PARTY_NOTICES.md" />
   </ItemGroup>
   <ItemGroup Condition="'$(TikTokBusinessAndroidNativeDir)' != '' and Exists('$(TikTokBusinessAndroidNativeDir)/aar')">
     <None Include="$(TikTokBusinessAndroidNativeDir)/aar/*.aar" Pack="true" PackagePath="android/aar/" />
