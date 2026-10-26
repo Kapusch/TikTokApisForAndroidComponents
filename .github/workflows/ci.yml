@@ -8,6 +8,13 @@ permissions:
   contents: read
 
 jobs:
+  public_scan:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Scan tracked files for private identifiers
+        run: python3 scripts/verify-public.py
+
   build_pack_android:
     # Pinned: on ubuntu-26.04 (ubuntu-latest since Oct 2026) the android workload install fails with "Disk quota exceeded".
     runs-on: ubuntu-24.04
@@ -37,3 +44,41 @@ jobs:
         with:
           name: nuget
           path: artifacts/nuget/*.nupkg
+
+  build_pack_business_android:
+    # Same pinned runner and toolchain as the Share package job.
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.203"
+      - uses: actions/setup-java@v4
+        with:
+          distribution: microsoft
+          java-version: "21"
+      - uses: android-actions/setup-android@v4
+        with:
+          cmdline-tools-version: '12266719'
+          packages: 'platform-tools'
+      - name: Install Android workload
+        run: dotnet workload install android --version 10.0.203
+      - name: Build locked TikTok Business SDK wrapper
+        run: bash src/Kapusch.TikTok.Business.Android/Native/Android/build.sh
+      - name: Pack
+        run: dotnet pack src/Kapusch.TikTok.Business.Android/Kapusch.TikTok.Business.Android.csproj -c Release -o artifacts/nuget
+      - name: Validate package
+        run: scripts/validate-business-package.sh
+      - name: Clean-consumer sample (Release, R8, with Billing and Install Referrer)
+        run: >-
+          dotnet build samples/Kapusch.TikTok.Business.Android.Sample/Kapusch.TikTok.Business.Android.Sample.csproj
+          -c Release -p:RuntimeIdentifier=android-arm64
+      - name: Clean-consumer sample (Release, R8, without optional dependencies)
+        run: |
+          rm -rf samples/Kapusch.TikTok.Business.Android.Sample/bin samples/Kapusch.TikTok.Business.Android.Sample/obj
+          dotnet build samples/Kapusch.TikTok.Business.Android.Sample/Kapusch.TikTok.Business.Android.Sample.csproj \
+            -c Release -p:RuntimeIdentifier=android-arm64 -p:SampleWithoutOptionalAndroidDeps=true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nuget-business
+          path: artifacts/nuget/Kapusch.TikTok.Business.Android.*.nupkg
