@@ -97,9 +97,24 @@ public static partial class TikTokBusinessSdk
 		}
 
 		Task<TikTokBusinessInitResult> initialization;
+		TaskCompletionSource<TikTokBusinessInitResult>? owner = null;
 		lock (Gate)
 		{
-			initialization = _initialization ??= StartInitialization(config);
+			if (_initialization is null)
+			{
+				owner = new TaskCompletionSource<TikTokBusinessInitResult>(
+					TaskCreationOptions.RunContinuationsAsynchronously
+				);
+				_initialization = owner.Task;
+			}
+			initialization = _initialization;
+		}
+
+		// Only the caller that created the shared task starts the native initialization, and it
+		// does so outside the lock so a synchronous native result cannot re-enter it.
+		if (owner is not null)
+		{
+			StartInitialization(config, owner);
 		}
 		return cancellationToken.CanBeCanceled ? initialization.WaitAsync(cancellationToken) : initialization;
 	}
@@ -361,56 +376,57 @@ public static partial class TikTokBusinessSdk
 
 	private static bool CanForward() => _forwardingEnabled && Volatile.Read(ref _initialization) is not null;
 
-	private static Task<TikTokBusinessInitResult> StartInitialization(TikTokBusinessConfig config)
+	private static void StartInitialization(
+		TikTokBusinessConfig config,
+		TaskCompletionSource<TikTokBusinessInitResult> completion
+	)
 	{
-		var completion = new TaskCompletionSource<TikTokBusinessInitResult>(
-			TaskCreationOptions.RunContinuationsAsynchronously
-		);
-		var task = completion.Task;
-		task.ContinueWith(
-			static (finished, _) =>
-			{
-				if (!finished.IsCompletedSuccessfully || !finished.Result.IsSuccess)
-				{
-					lock (Gate)
-					{
-						if (ReferenceEquals(_initialization, finished))
-						{
-							_initialization = null;
-						}
-					}
-				}
-			},
-			null,
-			CancellationToken.None,
-			TaskContinuationOptions.ExecuteSynchronously,
-			TaskScheduler.Default
-		);
-
 		try
 		{
 			using var bundle = ToBundle(config);
-			NativeTikTokBusinessInterop.Initialize(bundle, result => completion.TrySetResult(result));
+			NativeTikTokBusinessInterop.Initialize(bundle, result => Complete(completion, result));
 		}
 		catch (Java.Lang.ClassNotFoundException error)
 		{
-			completion.TrySetResult(
+			Complete(
+				completion,
 				TikTokBusinessInitResult.Failure(TikTokBusinessInitErrorCodes.NativeUnavailable, error.Message)
 			);
 		}
 		catch (Java.Lang.NoClassDefFoundError error)
 		{
-			completion.TrySetResult(
+			Complete(
+				completion,
 				TikTokBusinessInitResult.Failure(TikTokBusinessInitErrorCodes.NativeUnavailable, error.Message)
 			);
 		}
 		catch (Java.Lang.Throwable error)
 		{
-			completion.TrySetResult(
+			Complete(
+				completion,
 				TikTokBusinessInitResult.Failure(TikTokBusinessInitErrorCodes.NativeException, error.Message)
 			);
 		}
-		return task;
+	}
+
+	// A failure clears the shared task before completing it, so a caller that awaited the
+	// failure can retry immediately and gets a fresh native initialization.
+	private static void Complete(
+		TaskCompletionSource<TikTokBusinessInitResult> completion,
+		TikTokBusinessInitResult result
+	)
+	{
+		if (!result.IsSuccess)
+		{
+			lock (Gate)
+			{
+				if (ReferenceEquals(_initialization, completion.Task))
+				{
+					_initialization = null;
+				}
+			}
+		}
+		completion.TrySetResult(result);
 	}
 
 	private static Bundle ToBundle(TikTokBusinessConfig config)

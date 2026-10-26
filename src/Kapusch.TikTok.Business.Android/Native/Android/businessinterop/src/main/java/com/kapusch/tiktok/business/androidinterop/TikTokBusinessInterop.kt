@@ -139,35 +139,38 @@ object TikTokBusinessInterop {
     fun sdkVersion(): String = com.tiktok.BuildConfig.VERSION_NAME
 
     @JvmStatic
-    fun startTrack() {
-        TikTokBusinessSdk.startTrack()
-    }
+    fun startTrack() = guarded("startTrack") { TikTokBusinessSdk.startTrack() }
 
     /**
      * Tracks one event. [propertiesJson] is a JSON object produced by the managed
      * layer; an empty [eventId] lets the SDK generate one.
      */
     @JvmStatic
-    fun trackEvent(name: String, propertiesJson: String?, eventId: String?) {
-        if (name.isBlank()) return
+    fun trackEvent(name: String, propertiesJson: String?, eventId: String?) = guarded("trackEvent") {
+        if (name.isBlank()) return@guarded
         val properties = if (propertiesJson.isNullOrBlank()) JSONObject() else JSONObject(propertiesJson)
         val id = eventId?.takeIf { it.isNotBlank() }
         TikTokBusinessSdk.trackTTEvent(TTBaseEvent(name, properties, id))
     }
 
     @JvmStatic
-    fun identify(externalId: String?, externalUserName: String?, phoneNumber: String?, email: String?) {
-        TikTokBusinessSdk.identify(externalId, externalUserName, phoneNumber, email)
-    }
+    fun identify(externalId: String?, externalUserName: String?, phoneNumber: String?, email: String?) =
+        guarded("identify") { TikTokBusinessSdk.identify(externalId, externalUserName, phoneNumber, email) }
 
     @JvmStatic
-    fun logout() {
-        TikTokBusinessSdk.logout()
-    }
+    fun logout() = guarded("logout") { TikTokBusinessSdk.logout() }
 
     @JvmStatic
-    fun flush() {
-        TikTokBusinessSdk.flush()
+    fun flush() = guarded("flush") { TikTokBusinessSdk.flush() }
+
+    // Measurement calls are fire-and-forget: a failure is logged and never
+    // propagates into the host application.
+    private inline fun guarded(operation: String, block: () -> Unit) {
+        try {
+            block()
+        } catch (error: Throwable) {
+            Log.w(LOG_TAG, "TikTok Business SDK $operation failed: ${error.javaClass.simpleName}")
+        }
     }
 
     private fun logLevel(value: Int): TikTokBusinessSdk.LogLevel = when (value) {
