@@ -26,6 +26,11 @@ if grep -Eq "tiktok-open-sdk-auth|TikTokAuth" <<<"$entries"; then
   exit 1
 fi
 
+if grep -Eq "tiktok-business|ktk-business|Kapusch\.TikTok\.Business" <<<"$entries"; then
+  echo "Unexpected TikTok Business SDK artifact in Share package." >&2
+  exit 1
+fi
+
 tmp_dir="$(mktemp -d)"
 trap 'rm -rf "$tmp_dir"' EXIT
 unzip -q "$package" "android/aar/*.aar" -d "$tmp_dir"
