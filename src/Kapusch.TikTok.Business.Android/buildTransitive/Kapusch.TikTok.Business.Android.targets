@@ -1,0 +1,20 @@
+<Project>
+  <!--
+    Injects the Kapusch interop AAR and the locked TikTok Business SDK AAR.
+    Only these two vendor AARs are injected: shared AndroidX/Kotlin classes come
+    from managed NuGet dependencies, and Billing / Install Referrer stay owned by
+    the consuming application.
+  -->
+  <PropertyGroup>
+    <_KapuschTikTokBusinessAndroidNativeRoot>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)../android'))</_KapuschTikTokBusinessAndroidNativeRoot>
+    <_KapuschTikTokBusinessAndroidNativeRoot Condition="'$(UseKapuschTikTokBusinessAndroidInteropFromSource)' == 'true'">$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)../Native/Android/build'))</_KapuschTikTokBusinessAndroidNativeRoot>
+  </PropertyGroup>
+  <Target Name="KapuschTikTokBusinessInterop_InjectAndroidLibraries" BeforeTargets="_ResolveLibraryProjectImports" Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android' and '$(DisableKapuschTikTokBusinessAndroidNativeAssets)' != 'true'">
+    <Error Condition="'$(UseKapuschTikTokBusinessAndroidInteropFromSource)' == 'true' and !Exists('$(_KapuschTikTokBusinessAndroidNativeRoot)/aar/ktk-business-interop-release.aar')" Text="Kapusch.TikTok.Business.Android source-mode native assets are missing. Run src/Kapusch.TikTok.Business.Android/Native/Android/build.sh." />
+    <Error Condition="'$(UseKapuschTikTokBusinessAndroidInteropFromSource)' != 'true' and !Exists('$(_KapuschTikTokBusinessAndroidNativeRoot)/aar/ktk-business-interop-release.aar')" Text="Kapusch.TikTok.Business.Android package native assets are missing from $(_KapuschTikTokBusinessAndroidNativeRoot)." />
+    <ItemGroup>
+      <AndroidAarLibrary Include="$(_KapuschTikTokBusinessAndroidNativeRoot)/aar/ktk-business-interop-release.aar" />
+      <AndroidAarLibrary Include="$(_KapuschTikTokBusinessAndroidNativeRoot)/aar/tiktok-business-android-sdk-*.aar" />
+    </ItemGroup>
+  </Target>
+</Project>
