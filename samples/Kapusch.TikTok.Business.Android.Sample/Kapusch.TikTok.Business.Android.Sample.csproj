@@ -1,0 +1,42 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Clean-consumer qualification app: restores Kapusch.TikTok.Business.Android from
+    ../../artifacts/nuget (see NuGet.Config) exactly as an application would.
+    Build in Release to exercise R8 and the duplicate-class check of the dex step.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0-android</TargetFramework>
+    <SupportedOSPlatformVersion>23</SupportedOSPlatformVersion>
+    <OutputType>Exe</OutputType>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <ApplicationId>com.kapusch.tiktokbusinessandroid.sample</ApplicationId>
+    <ApplicationTitle>TikTok Business Sample</ApplicationTitle>
+    <ApplicationVersion>1</ApplicationVersion>
+    <ApplicationDisplayVersion>1.0</ApplicationDisplayVersion>
+    <IsPackable>false</IsPackable>
+    <KapuschTikTokBusinessAndroidVersion Condition="'$(KapuschTikTokBusinessAndroidVersion)' == ''">1.0.0</KapuschTikTokBusinessAndroidVersion>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+    <AndroidLinkTool>r8</AndroidLinkTool>
+    <AndroidPackageFormat>apk</AndroidPackageFormat>
+    <AndroidKeyStore>false</AndroidKeyStore>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Kapusch.TikTok.Business.Android" Version="$(KapuschTikTokBusinessAndroidVersion)" />
+  </ItemGroup>
+  <!--
+    Optional, application-owned dependencies of the TikTok Business SDK. Real apps
+    usually get Billing from their subscription SDK. Build with
+    -p:SampleWithoutOptionalAndroidDeps=true to prove the package also links without them.
+  -->
+  <ItemGroup Condition="'$(SampleWithoutOptionalAndroidDeps)' != 'true'">
+    <PackageReference Include="Xamarin.Android.Google.BillingClient" Version="8.3.0.2" />
+    <PackageReference Include="Xamarin.Google.Android.InstallReferrer" Version="2.2.0.9" />
+  </ItemGroup>
+  <!-- Untracked local credentials, copied from TikTokBusiness.template.json. -->
+  <ItemGroup>
+    <AndroidAsset Remove="Assets/**" />
+    <AndroidAsset Include="Assets/TikTokBusiness.local.json" Condition="Exists('Assets/TikTokBusiness.local.json')" />
+  </ItemGroup>
+</Project>
