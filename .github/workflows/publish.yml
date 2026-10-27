@@ -1,8 +1,21 @@
 name: publish
 
+# One workflow releases either package so the NuGet Trusted Publishing policy
+# bound to this file covers both:
+# - tags v*          -> Kapusch.TikTok.Android (OpenSDK Share), unchanged contract;
+# - tags business-v* -> Kapusch.TikTok.Business.Android.
+# GitHub tag filters match the whole ref name, so "v*" never matches "business-v*".
 on:
   workflow_dispatch:
     inputs:
+      package:
+        description: "Package to publish"
+        required: true
+        default: share
+        type: choice
+        options:
+          - share
+          - business
       manual_version:
         description: "Publish this version to NuGet.org; leave empty for a GitHub Packages preview"
         required: false
@@ -10,6 +23,7 @@ on:
   push:
     tags:
       - "v*"
+      - "business-v*"
 
 permissions:
   contents: read
@@ -28,24 +42,82 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Select package
+        id: package
+        shell: bash
+        env:
+          REF: ${{ github.ref }}
+          EVENT: ${{ github.event_name }}
+          INPUT_PACKAGE: ${{ github.event.inputs.package }}
+        run: |
+          if [[ "$REF" =~ ^refs/tags/business-v ]]; then
+            TAG_PACKAGE="business"
+          elif [[ "$REF" =~ ^refs/tags/v ]]; then
+            TAG_PACKAGE="share"
+          else
+            TAG_PACKAGE=""
+          fi
+
+          if [[ "$EVENT" == "workflow_dispatch" ]]; then
+            PACKAGE="${INPUT_PACKAGE:-share}"
+            if [[ -n "$TAG_PACKAGE" && "$TAG_PACKAGE" != "$PACKAGE" ]]; then
+              echo "ERROR: tag $REF belongs to the $TAG_PACKAGE package, not $PACKAGE."
+              exit 1
+            fi
+          else
+            PACKAGE="$TAG_PACKAGE"
+          fi
+
+          case "$PACKAGE" in
+            share)
+              echo "package_id=Kapusch.TikTok.Android" >> "$GITHUB_OUTPUT"
+              echo "csproj=src/Kapusch.TikTokApisForAndroidComponents/Kapusch.TikTokApisForAndroidComponents.csproj" >> "$GITHUB_OUTPUT"
+              echo "native_build=src/Kapusch.TikTokApisForAndroidComponents/Native/Android/build.sh" >> "$GITHUB_OUTPUT"
+              echo "validator=scripts/validate-package.sh" >> "$GITHUB_OUTPUT"
+              echo "tag_prefix=v" >> "$GITHUB_OUTPUT"
+              ;;
+            business)
+              echo "package_id=Kapusch.TikTok.Business.Android" >> "$GITHUB_OUTPUT"
+              echo "csproj=src/Kapusch.TikTok.Business.Android/Kapusch.TikTok.Business.Android.csproj" >> "$GITHUB_OUTPUT"
+              echo "native_build=src/Kapusch.TikTok.Business.Android/Native/Android/build.sh" >> "$GITHUB_OUTPUT"
+              echo "validator=scripts/validate-business-package.sh" >> "$GITHUB_OUTPUT"
+              echo "tag_prefix=business-v" >> "$GITHUB_OUTPUT"
+              ;;
+            *)
+              echo "ERROR: cannot determine the package to publish for $EVENT on $REF."
+              exit 1
+              ;;
+          esac
+          echo "package=$PACKAGE" >> "$GITHUB_OUTPUT"
+          echo "Publishing package: $PACKAGE"
+
       - name: Determine package version
         id: version
         shell: bash
+        env:
+          REF: ${{ github.ref }}
+          MANUAL_VERSION: ${{ github.event.inputs.manual_version }}
+          PACKAGE: ${{ steps.package.outputs.package }}
+          CSPROJ: ${{ steps.package.outputs.csproj }}
+          TAG_PREFIX: ${{ steps.package.outputs.tag_prefix }}
         run: |
-          REF="${{ github.ref }}"
-          MANUAL_VERSION="${{ github.event.inputs.manual_version }}"
-          CSPROJ="src/Kapusch.TikTokApisForAndroidComponents/Kapusch.TikTokApisForAndroidComponents.csproj"
           BASE_VERSION=$(grep -oE '<Version>[^<]+' "$CSPROJ" | head -n 1 | sed 's/<Version>//')
 
           if [[ -n "$MANUAL_VERSION" ]]; then
             VERSION="$MANUAL_VERSION"
             PUBLISH_TARGET="nuget"
-          elif [[ "$REF" =~ ^refs/tags/v ]]; then
-            VERSION="${REF#refs/tags/v}"
+          elif [[ "$REF" == refs/tags/${TAG_PREFIX}* ]]; then
+            VERSION="${REF#refs/tags/${TAG_PREFIX}}"
             PUBLISH_TARGET="nuget"
           else
             VERSION="${BASE_VERSION}-preview.${{ github.run_number }}.$(git rev-parse --short HEAD)"
             PUBLISH_TARGET="github"
+          fi
+
+          if [[ "$PACKAGE" == "business" && "$PUBLISH_TARGET" == "nuget" ]] \
+            && ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-rc\.[0-9]+)?$ ]]; then
+            echo "ERROR: Business releases must be X.Y.Z or X.Y.Z-rc.N (got '$VERSION')."
+            exit 1
           fi
 
           if [[ "$PUBLISH_TARGET" == "nuget" ]]; then
@@ -58,6 +130,21 @@ jobs:
 
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "publish_target=$PUBLISH_TARGET" >> "$GITHUB_OUTPUT"
+
+      - name: Refuse to republish an existing NuGet.org version
+        if: steps.version.outputs.publish_target == 'nuget'
+        shell: bash
+        env:
+          PACKAGE_ID: ${{ steps.package.outputs.package_id }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          id_lower="$(tr '[:upper:]' '[:lower:]' <<<"$PACKAGE_ID")"
+          version_lower="$(tr '[:upper:]' '[:lower:]' <<<"$VERSION")"
+          index="$(curl -fsS "https://api.nuget.org/v3-flatcontainer/$id_lower/index.json" || true)"
+          if grep -Fq "\"$version_lower\"" <<<"$index"; then
+            echo "ERROR: $PACKAGE_ID $VERSION is already on NuGet.org. Versions are immutable: publish a new version."
+            exit 1
+          fi
 
       - uses: actions/setup-dotnet@v4
         with:
@@ -77,18 +164,22 @@ jobs:
       - name: Install Android workload
         run: dotnet workload install android --version 10.0.203
 
-      - name: Build pinned Core + Share wrapper
-        run: bash src/Kapusch.TikTokApisForAndroidComponents/Native/Android/build.sh
+      - name: Build pinned native assets
+        run: bash "${{ steps.package.outputs.native_build }}"
 
       - name: Pack
         run: |
-          dotnet pack src/Kapusch.TikTokApisForAndroidComponents/Kapusch.TikTokApisForAndroidComponents.csproj \
+          dotnet pack "${{ steps.package.outputs.csproj }}" \
             -c Release \
             -o artifacts/nuget \
-            /p:PackageVersion="${{ steps.version.outputs.version }}"
+            /p:PackageVersion="${{ steps.version.outputs.version }}" \
+            /p:ContinuousIntegrationBuild=true \
+            /p:RepositoryCommit="${{ github.sha }}"
 
       - name: Validate package
-        run: scripts/validate-package.sh "artifacts/nuget/Kapusch.TikTok.Android.${{ steps.version.outputs.version }}.nupkg"
+        run: |
+          "${{ steps.package.outputs.validator }}" \
+            "artifacts/nuget/${{ steps.package.outputs.package_id }}.${{ steps.version.outputs.version }}.nupkg"
 
       - name: Push to NuGet.org
         if: steps.version.outputs.publish_target == 'nuget'
@@ -100,17 +191,21 @@ jobs:
       - name: Push to NuGet.org
         if: steps.version.outputs.publish_target == 'nuget'
         run: |
-          dotnet nuget push artifacts/nuget/*.nupkg \
+          dotnet nuget push "artifacts/nuget/${{ steps.package.outputs.package_id }}.${{ steps.version.outputs.version }}.nupkg" \
             --api-key "${{ steps.nuget_login.outputs.NUGET_API_KEY }}" \
-            --source "https://api.nuget.org/v3/index.json" \
-            --skip-duplicate
+            --source "https://api.nuget.org/v3/index.json"
 
       - name: Push to GitHub Packages
         if: steps.version.outputs.publish_target == 'github'
         env:
           NUGET_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          dotnet nuget push artifacts/nuget/*.nupkg \
+          dotnet nuget push "artifacts/nuget/${{ steps.package.outputs.package_id }}.${{ steps.version.outputs.version }}.nupkg" \
             --api-key "$NUGET_AUTH_TOKEN" \
             --source "https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json" \
             --skip-duplicate
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.package.outputs.package_id }}-${{ steps.version.outputs.version }}
+          path: artifacts/nuget/${{ steps.package.outputs.package_id }}.${{ steps.version.outputs.version }}.nupkg

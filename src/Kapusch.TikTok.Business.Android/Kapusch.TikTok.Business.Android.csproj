@@ -1,0 +1,65 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0-android</TargetFramework>
+    <SupportedOSPlatformVersion>23</SupportedOSPlatformVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <DefaultItemExcludes>$(DefaultItemExcludes);Native/**</DefaultItemExcludes>
+    <PackageId>Kapusch.TikTok.Business.Android</PackageId>
+    <Authors>Kapusch</Authors>
+    <Description>.NET Android interop for the TikTok Business SDK (App Events): consent-gated initialization, standard events and attribution controls.</Description>
+    <PackageTags>tiktok;business;app-events;attribution;android;maui</PackageTags>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <RepositoryUrl>https://github.com/Kapusch/TikTokApisForAndroidComponents</RepositoryUrl>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <IsPackable>true</IsPackable>
+    <IncludeSymbols>false</IncludeSymbols>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);NU5128</NoWarn>
+    <AssemblyName>Kapusch.TikTok.Business.Android</AssemblyName>
+    <RootNamespace>Kapusch.TikTok.Business.Android</RootNamespace>
+    <Version>1.0.0</Version>
+    <PackageReadmeFile>nuget-readme.md</PackageReadmeFile>
+    <TikTokBusinessAndroidNativeDir Condition="'$(TikTokBusinessAndroidNativeDir)' == '' and Exists('Native/Android/build/aar')">Native/Android/build</TikTokBusinessAndroidNativeDir>
+  </PropertyGroup>
+  <ItemGroup>
+    <AndroidAarLibrary Remove="Native/**" />
+    <AndroidExternalJavaLibrary Remove="Native/**" />
+    <AndroidJavaSource Remove="Native/**" />
+    <AndroidLibrary Remove="Native/**" />
+    <Content Remove="Native/**" />
+    <EmbeddedResource Remove="Native/**" />
+    <LibraryProjectZip Remove="Native/**" />
+    <None Remove="Native/**" />
+  </ItemGroup>
+  <ItemGroup>
+    <!--
+      Shared Java dependencies of the upstream SDK (androidx.annotation,
+      androidx.lifecycle:lifecycle-process, which also provides the former
+      lifecycle-common-java8 classes) and of the Kotlin facade come from managed
+      NuGets so they unify with the rest of a .NET Android / MAUI app instead of
+      duplicating classes. The lifecycle family uses strict version ranges, so the
+      lower bound follows lifecycle 2.10, the family already required by
+      AndroidX AppCompat/Emoji2 1.6 and Google Play Billing 8.3 bindings; a 2.9.x
+      bound fails restore with NU1107 next to Billing 8.3.
+      Google Play Billing and Install Referrer are compile-only upstream and stay
+      consumer-owned: see Docs/Business/Integration.md.
+    -->
+    <PackageReference Include="Xamarin.AndroidX.Annotation" Version="1.9.1.6" />
+    <PackageReference Include="Xamarin.AndroidX.Lifecycle.Process" Version="2.10.0.1" />
+    <PackageReference Include="Xamarin.Kotlin.StdLib" Version="2.3.0.1" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="buildTransitive/**" Pack="true" PackagePath="buildTransitive/" />
+    <None Include="nuget-readme.md" Pack="true" PackagePath="/" />
+    <None Include="../../THIRD_PARTY_NOTICES.Business.md" Pack="true" PackagePath="THIRD_PARTY_NOTICES.md" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(TikTokBusinessAndroidNativeDir)' != '' and Exists('$(TikTokBusinessAndroidNativeDir)/aar')">
+    <None Include="$(TikTokBusinessAndroidNativeDir)/aar/*.aar" Pack="true" PackagePath="android/aar/" />
+    <None Include="$(TikTokBusinessAndroidNativeDir)/licenses/*" Pack="true" PackagePath="licenses/" />
+  </ItemGroup>
+  <Target Name="_KapuschTikTokBusinessAndroid_CheckNativeAssets" BeforeTargets="GenerateNuspec" Condition="'$(IsPackable)' == 'true'">
+    <Error Condition="'$(TikTokBusinessAndroidNativeDir)' == '' or !Exists('$(TikTokBusinessAndroidNativeDir)/aar/ktk-business-interop-release.aar')" Text="Missing TikTok Business interop AAR. Run Native/Android/build.sh first." />
+    <Error Condition="!Exists('$(TikTokBusinessAndroidNativeDir)/aar/tiktok-business-android-sdk-1.7.1.aar')" Text="Missing locked TikTok Business SDK AAR. Run Native/Android/build.sh first." />
+  </Target>
+</Project>
